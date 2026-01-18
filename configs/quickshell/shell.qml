@@ -1209,15 +1209,15 @@ Scope {
 
                         // Content
                         Column {
-                            x: 8; y: 26
-                            width: parent.width - 16
-                            spacing: 2
+                            x: 10; y: 28
+                            width: parent.width - 20
+                            spacing: 4
 
                             Text {
                                 width: parent.width
                                 text: modelData.summary || ""
                                 font.family: fontCharcoal.name
-                                font.pixelSize: 11
+                                font.pixelSize: 13
                                 font.bold: true
                                 color: Config.colors.text
                                 elide: Text.ElideRight
@@ -1227,8 +1227,9 @@ Scope {
                                 width: parent.width
                                 text: modelData.body || ""
                                 font.family: fontMonaco.name
-                                font.pixelSize: 9
-                                color: Config.colors.shadow
+                                font.pixelSize: 11
+                                color: Config.colors.text
+                                opacity: 0.8
                                 wrapMode: Text.WordWrap
                                 maximumLineCount: 2
                                 elide: Text.ElideRight
@@ -1518,7 +1519,7 @@ Scope {
                                         width: parent.width
                                         text: modelData.summary || ""
                                         font.family: fontCharcoal.name
-                                        font.pixelSize: 11
+                                        font.pixelSize: 12
                                         font.bold: true
                                         color: Config.colors.text
                                         elide: Text.ElideRight
@@ -1528,8 +1529,9 @@ Scope {
                                         width: parent.width
                                         text: modelData.body || ""
                                         font.family: fontMonaco.name
-                                        font.pixelSize: 9
-                                        color: Config.colors.shadow
+                                        font.pixelSize: 11
+                                        color: Config.colors.text
+                                        opacity: 0.8
                                         wrapMode: Text.WordWrap
                                         maximumLineCount: 2
                                         elide: Text.ElideRight
