@@ -1035,6 +1035,8 @@ Scope {
     }
 
     // ============ NOTIFICATION SERVER ============
+    property int notificationCount: 0
+    
     NotificationServer {
         id: notificationServer
         keepOnReload: true
@@ -1045,11 +1047,21 @@ Scope {
 
         onNotification: notification => {
             notification.tracked = true;
+            root.notificationCount = trackedNotifications.values.length;
+            console.log("Notification added, count:", root.notificationCount);
             // Auto-dismiss after timeout (or 5 seconds default)
             let timeout = notification.expireTimeout > 0 ? notification.expireTimeout : 5000;
             if (!notification.resident) {
                 dismissTimer.setTimeout(notification, timeout);
             }
+        }
+    }
+    
+    Connections {
+        target: notificationServer.trackedNotifications
+        function onValuesChanged() {
+            root.notificationCount = notificationServer.trackedNotifications.values.length;
+            console.log("Values changed, count:", root.notificationCount);
         }
     }
 
@@ -1076,7 +1088,7 @@ Scope {
             id: notificationPopup
             required property var modelData
             screen: modelData
-            visible: notificationServer.trackedNotifications.count > 0 && Hyprland.focusedMonitor.name === modelData.name && !Config.openNotificationHistory
+            visible: root.notificationCount > 0 && Hyprland.focusedMonitor.name === modelData.name && !Config.openNotificationHistory
 
             WlrLayershell.layer: WlrLayer.Overlay
             WlrLayershell.namespace: "notification-popup"
@@ -1086,8 +1098,8 @@ Scope {
                 top: true
                 right: true
             }
-            width: 340
-            height: Math.min(notificationServer.trackedNotifications.count * 90, 400)
+            implicitWidth: 340
+            implicitHeight: Math.max(root.notificationCount * 90, 10)
             margins.top: 50
             margins.right: 10
             color: "transparent"
@@ -1216,7 +1228,7 @@ Scope {
                                 text: modelData.body || ""
                                 font.family: fontMonaco.name
                                 font.pixelSize: 9
-                                color: Config.colors.subtext
+                                color: Config.colors.shadow
                                 wrapMode: Text.WordWrap
                                 maximumLineCount: 2
                                 elide: Text.ElideRight
@@ -1289,7 +1301,7 @@ Scope {
                 bottom: true
                 right: true
             }
-            width: 380
+            implicitWidth: 380
             color: "transparent"
 
             Rectangle {
@@ -1411,11 +1423,11 @@ Scope {
                     color: clearAllArea.pressed ? Config.colors.shadow : Config.colors.highlight
                     border.width: 1
                     border.color: Config.colors.outline
-                    visible: notificationServer.trackedNotifications.count > 0
+                    visible: root.notificationCount > 0
 
                     Text {
                         anchors.centerIn: parent
-                        text: "Clear All (" + notificationServer.trackedNotifications.count + ")"
+                        text: "Clear All (" + root.notificationCount + ")"
                         font.family: fontCharcoal.name
                         font.pixelSize: 10
                         color: Config.colors.text
@@ -1426,8 +1438,9 @@ Scope {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
-                            for (let i = notificationServer.trackedNotifications.count - 1; i >= 0; i--) {
-                                notificationServer.trackedNotifications.values[i].dismiss();
+                            let notifications = notificationServer.trackedNotifications.values.slice();
+                            for (let notif of notifications) {
+                                notif.dismiss();
                             }
                         }
                     }
@@ -1435,7 +1448,7 @@ Scope {
 
                 // Notification list
                 Flickable {
-                    x: 6; y: notificationServer.trackedNotifications.count > 0 ? 70 : 40
+                    x: 6; y: root.notificationCount > 0 ? 70 : 40
                     width: parent.width - 12
                     height: parent.height - y - 10
                     contentHeight: historyColumn.height
@@ -1449,11 +1462,11 @@ Scope {
                         // Empty state
                         Text {
                             width: parent.width
-                            visible: notificationServer.trackedNotifications.count === 0
+                            visible: root.notificationCount === 0
                             text: "No notifications"
                             font.family: fontMonaco.name
                             font.pixelSize: 12
-                            color: Config.colors.subtext
+                            color: Config.colors.shadow
                             horizontalAlignment: Text.AlignHCenter
                             topPadding: 40
                         }
@@ -1516,7 +1529,7 @@ Scope {
                                         text: modelData.body || ""
                                         font.family: fontMonaco.name
                                         font.pixelSize: 9
-                                        color: Config.colors.subtext
+                                        color: Config.colors.shadow
                                         wrapMode: Text.WordWrap
                                         maximumLineCount: 2
                                         elide: Text.ElideRight
