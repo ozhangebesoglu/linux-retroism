@@ -54,8 +54,8 @@ Scope {
             property int currentTab: 0
 
             Rectangle {
-                width: 420
-                height: 380
+                width: 480
+                height: 420
                 x: (settingsWindow.width - width) / 2
                 y: (settingsWindow.height - height) / 2
                 color: Config.colors.base
@@ -84,9 +84,9 @@ Scope {
                             spacing: 2
 
                             Repeater {
-                                model: ["Appearance", "System", "About"]
+                                model: ["Appearance", "System", "Network", "Bluetooth", "About"]
                                 Rectangle {
-                                    width: (parent.width - 4) / 3
+                                    width: (parent.width - 8) / 5
                                     height: 28
                                     color: settingsWindow.currentTab === index ? Config.colors.highlight : Config.colors.shadow
                                     border.width: 1
@@ -347,11 +347,287 @@ Scope {
                                     }
                                 }
 
+                                // === NETWORK TAB ===
+                                Item {
+                                    id: networkTab
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    visible: settingsWindow.currentTab === 2
+
+                                    property var wifiList: []
+                                    property string currentWifi: ""
+                                    property bool wifiEnabled: true
+                                    property bool scanning: false
+
+                                    Component.onCompleted: refreshNetworks()
+
+                                    function refreshNetworks() {
+                                        scanning = true;
+                                        Quickshell.exec("nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list", function(result) {
+                                            var lines = result.stdout.trim().split('\n');
+                                            var networks = [];
+                                            currentWifi = "";
+                                            for (var i = 0; i < lines.length; i++) {
+                                                var parts = lines[i].split(':');
+                                                if (parts[0] && parts[0].trim() !== "") {
+                                                    var net = { ssid: parts[0], signal: parseInt(parts[1]) || 0, security: parts[2] || "", active: parts[3] === "*" };
+                                                    networks.push(net);
+                                                    if (net.active) currentWifi = net.ssid;
+                                                }
+                                            }
+                                            wifiList = networks;
+                                            scanning = false;
+                                        });
+                                        Quickshell.exec("nmcli radio wifi", function(result) {
+                                            wifiEnabled = result.stdout.trim() === "enabled";
+                                        });
+                                    }
+
+                                    function toggleWifi() {
+                                        var cmd = wifiEnabled ? "nmcli radio wifi off" : "nmcli radio wifi on";
+                                        Quickshell.exec(cmd, function() { Qt.callLater(refreshNetworks); });
+                                    }
+
+                                    function connectToNetwork(ssid) {
+                                        Quickshell.execDetached("nmcli device wifi connect '" + ssid + "'");
+                                    }
+
+                                    Column {
+                                        anchors.fill: parent
+                                        spacing: 10
+
+                                        Row {
+                                            width: parent.width
+                                            spacing: 10
+                                            Text { text: "WiFi"; font.family: fontCharcoal.name; font.pixelSize: 12; font.bold: true; color: Config.colors.text; anchors.verticalCenter: parent.verticalCenter }
+                                            Item { width: parent.width - 150; height: 1 }
+                                            Rectangle {
+                                                width: 40; height: 20
+                                                color: networkTab.wifiEnabled ? Config.colors.accent : Config.colors.shadow
+                                                border.width: 1; border.color: Config.colors.outline
+                                                Rectangle {
+                                                    width: 16; height: 16; y: 2
+                                                    x: networkTab.wifiEnabled ? 22 : 2
+                                                    color: Config.colors.highlight; border.width: 1; border.color: Config.colors.outline
+                                                    Behavior on x { NumberAnimation { duration: 150 } }
+                                                }
+                                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: networkTab.toggleWifi() }
+                                            }
+                                            Rectangle {
+                                                width: 24; height: 24
+                                                color: refreshArea.pressed ? Config.colors.shadow : Config.colors.highlight
+                                                border.width: 1; border.color: Config.colors.outline
+                                                Text { anchors.centerIn: parent; text: "\ue5d5"; font.family: iconFont.name; font.pixelSize: 14; color: Config.colors.text; rotation: networkTab.scanning ? 360 : 0; Behavior on rotation { RotationAnimation { duration: 500 } } }
+                                                MouseArea { id: refreshArea; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: networkTab.refreshNetworks() }
+                                            }
+                                        }
+
+                                        Rectangle { width: parent.width; height: 1; color: Config.colors.outline; opacity: 0.5 }
+
+                                        Rectangle {
+                                            width: parent.width; height: parent.height - 50
+                                            color: Config.colors.shadow; border.width: 1; border.color: Config.colors.outline
+                                            clip: true
+
+                                            ListView {
+                                                id: wifiListView
+                                                anchors.fill: parent; anchors.margins: 4
+                                                model: networkTab.wifiList
+                                                spacing: 2
+
+                                                delegate: Rectangle {
+                                                    width: wifiListView.width
+                                                    height: 28
+                                                    color: modelData.active ? Config.colors.accent : (wifiItemArea.containsMouse ? Config.colors.highlight : "transparent")
+                                                    
+                                                    Row {
+                                                        anchors.fill: parent; anchors.margins: 4; spacing: 8
+                                                        Text {
+                                                            text: modelData.signal > 75 ? "\ue1d8" : (modelData.signal > 50 ? "\uebe4" : (modelData.signal > 25 ? "\uebe1" : "\uf065"))
+                                                            font.family: iconFont.name; font.pixelSize: 16; color: modelData.active ? Config.colors.base : Config.colors.text
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                        }
+                                                        Text { text: modelData.ssid; font.family: fontMonaco.name; font.pixelSize: 10; color: modelData.active ? Config.colors.base : Config.colors.text; anchors.verticalCenter: parent.verticalCenter; elide: Text.ElideRight; width: 180 }
+                                                        Text { text: modelData.security !== "" ? "\ue897" : ""; font.family: iconFont.name; font.pixelSize: 12; color: modelData.active ? Config.colors.base : Config.colors.text; anchors.verticalCenter: parent.verticalCenter; opacity: 0.6 }
+                                                        Item { width: 1; height: 1; Layout.fillWidth: true }
+                                                        Text { text: modelData.signal + "%"; font.family: fontMonaco.name; font.pixelSize: 9; color: modelData.active ? Config.colors.base : Config.colors.text; anchors.verticalCenter: parent.verticalCenter; opacity: 0.6 }
+                                                    }
+                                                    MouseArea { id: wifiItemArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onDoubleClicked: networkTab.connectToNetwork(modelData.ssid) }
+                                                }
+                                            }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                visible: networkTab.wifiList.length === 0
+                                                text: networkTab.scanning ? "Scanning..." : (networkTab.wifiEnabled ? "No networks found" : "WiFi disabled")
+                                                font.family: fontMonaco.name; font.pixelSize: 10; color: Config.colors.text; opacity: 0.5
+                                            }
+                                        }
+
+                                        Text { text: "Double-click to connect"; font.family: fontMonaco.name; font.pixelSize: 8; color: Config.colors.text; opacity: 0.4 }
+                                    }
+                                }
+
+                                // === BLUETOOTH TAB ===
+                                Item {
+                                    id: bluetoothTab
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    visible: settingsWindow.currentTab === 3
+
+                                    property var deviceList: []
+                                    property bool btEnabled: true
+                                    property bool scanning: false
+
+                                    Component.onCompleted: refreshDevices()
+
+                                    function refreshDevices() {
+                                        scanning = true;
+                                        Quickshell.exec("bluetoothctl show 2>/dev/null | grep 'Powered:' | awk '{print $2}'", function(result) {
+                                            btEnabled = result.stdout.trim() === "yes";
+                                        });
+                                        Quickshell.exec("bluetoothctl devices", function(result) {
+                                            var lines = result.stdout.trim().split('\n');
+                                            var devices = [];
+                                            for (var i = 0; i < lines.length; i++) {
+                                                var match = lines[i].match(/Device ([A-F0-9:]+) (.+)/);
+                                                if (match) {
+                                                    devices.push({ mac: match[1], name: match[2], connected: false });
+                                                }
+                                            }
+                                            // Check connected devices
+                                            Quickshell.exec("bluetoothctl info 2>/dev/null | grep -E 'Device|Connected'", function(infoResult) {
+                                                var infoLines = infoResult.stdout.split('\n');
+                                                var connectedMacs = [];
+                                                for (var j = 0; j < infoLines.length; j++) {
+                                                    if (infoLines[j].includes("Connected: yes")) {
+                                                        // Previous line has MAC
+                                                        for (var k = j - 1; k >= 0; k--) {
+                                                            var macMatch = infoLines[k].match(/Device ([A-F0-9:]+)/);
+                                                            if (macMatch) { connectedMacs.push(macMatch[1]); break; }
+                                                        }
+                                                    }
+                                                }
+                                                for (var d = 0; d < devices.length; d++) {
+                                                    devices[d].connected = connectedMacs.indexOf(devices[d].mac) !== -1;
+                                                }
+                                                deviceList = devices;
+                                                scanning = false;
+                                            });
+                                        });
+                                    }
+
+                                    function toggleBluetooth() {
+                                        var cmd = btEnabled ? "bluetoothctl power off" : "bluetoothctl power on";
+                                        Quickshell.exec(cmd, function() { Qt.callLater(refreshDevices); });
+                                    }
+
+                                    function connectDevice(mac) {
+                                        Quickshell.execDetached("bluetoothctl connect " + mac);
+                                    }
+
+                                    function disconnectDevice(mac) {
+                                        Quickshell.execDetached("bluetoothctl disconnect " + mac);
+                                    }
+
+                                    function startScan() {
+                                        Quickshell.exec("bluetoothctl --timeout 5 scan on", function() { refreshDevices(); });
+                                    }
+
+                                    Column {
+                                        anchors.fill: parent
+                                        spacing: 10
+
+                                        Row {
+                                            width: parent.width
+                                            spacing: 10
+                                            Text { text: "Bluetooth"; font.family: fontCharcoal.name; font.pixelSize: 12; font.bold: true; color: Config.colors.text; anchors.verticalCenter: parent.verticalCenter }
+                                            Item { width: parent.width - 180; height: 1 }
+                                            Rectangle {
+                                                width: 40; height: 20
+                                                color: bluetoothTab.btEnabled ? Config.colors.accent : Config.colors.shadow
+                                                border.width: 1; border.color: Config.colors.outline
+                                                Rectangle {
+                                                    width: 16; height: 16; y: 2
+                                                    x: bluetoothTab.btEnabled ? 22 : 2
+                                                    color: Config.colors.highlight; border.width: 1; border.color: Config.colors.outline
+                                                    Behavior on x { NumberAnimation { duration: 150 } }
+                                                }
+                                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: bluetoothTab.toggleBluetooth() }
+                                            }
+                                            Rectangle {
+                                                width: 24; height: 24
+                                                color: btScanArea.pressed ? Config.colors.shadow : Config.colors.highlight
+                                                border.width: 1; border.color: Config.colors.outline
+                                                Text { anchors.centerIn: parent; text: "\ue1a7"; font.family: iconFont.name; font.pixelSize: 14; color: Config.colors.text }
+                                                MouseArea { id: btScanArea; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: bluetoothTab.startScan() }
+                                            }
+                                            Rectangle {
+                                                width: 24; height: 24
+                                                color: btRefreshArea.pressed ? Config.colors.shadow : Config.colors.highlight
+                                                border.width: 1; border.color: Config.colors.outline
+                                                Text { anchors.centerIn: parent; text: "\ue5d5"; font.family: iconFont.name; font.pixelSize: 14; color: Config.colors.text }
+                                                MouseArea { id: btRefreshArea; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: bluetoothTab.refreshDevices() }
+                                            }
+                                        }
+
+                                        Rectangle { width: parent.width; height: 1; color: Config.colors.outline; opacity: 0.5 }
+
+                                        Rectangle {
+                                            width: parent.width; height: parent.height - 50
+                                            color: Config.colors.shadow; border.width: 1; border.color: Config.colors.outline
+                                            clip: true
+
+                                            ListView {
+                                                id: btListView
+                                                anchors.fill: parent; anchors.margins: 4
+                                                model: bluetoothTab.deviceList
+                                                spacing: 2
+
+                                                delegate: Rectangle {
+                                                    width: btListView.width
+                                                    height: 28
+                                                    color: modelData.connected ? Config.colors.accent : (btItemArea.containsMouse ? Config.colors.highlight : "transparent")
+                                                    
+                                                    Row {
+                                                        anchors.fill: parent; anchors.margins: 4; spacing: 8
+                                                        Text {
+                                                            text: "\ue1a7"
+                                                            font.family: iconFont.name; font.pixelSize: 16; color: modelData.connected ? Config.colors.base : Config.colors.text
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                        }
+                                                        Column {
+                                                            anchors.verticalCenter: parent.verticalCenter; spacing: 0
+                                                            Text { text: modelData.name; font.family: fontMonaco.name; font.pixelSize: 10; color: modelData.connected ? Config.colors.base : Config.colors.text; elide: Text.ElideRight; width: 200 }
+                                                            Text { text: modelData.mac; font.family: fontMonaco.name; font.pixelSize: 7; color: modelData.connected ? Config.colors.base : Config.colors.text; opacity: 0.5 }
+                                                        }
+                                                        Item { width: 1; height: 1; Layout.fillWidth: true }
+                                                        Text { text: modelData.connected ? "Connected" : ""; font.family: fontMonaco.name; font.pixelSize: 8; color: Config.colors.base; anchors.verticalCenter: parent.verticalCenter }
+                                                    }
+                                                    MouseArea { 
+                                                        id: btItemArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                                        onDoubleClicked: modelData.connected ? bluetoothTab.disconnectDevice(modelData.mac) : bluetoothTab.connectDevice(modelData.mac)
+                                                    }
+                                                }
+                                            }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                visible: bluetoothTab.deviceList.length === 0
+                                                text: bluetoothTab.scanning ? "Scanning..." : (bluetoothTab.btEnabled ? "No devices found\nClick scan to discover" : "Bluetooth disabled")
+                                                font.family: fontMonaco.name; font.pixelSize: 10; color: Config.colors.text; opacity: 0.5; horizontalAlignment: Text.AlignHCenter
+                                            }
+                                        }
+
+                                        Text { text: "Double-click to connect/disconnect"; font.family: fontMonaco.name; font.pixelSize: 8; color: Config.colors.text; opacity: 0.4 }
+                                    }
+                                }
+
                                 // === ABOUT TAB ===
                                 Item {
                                     anchors.fill: parent
                                     anchors.margins: 12
-                                    visible: settingsWindow.currentTab === 2
+                                    visible: settingsWindow.currentTab === 4
 
                                     Column {
                                         anchors.centerIn: parent
