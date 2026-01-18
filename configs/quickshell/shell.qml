@@ -367,9 +367,9 @@ Scope {
                                     Process {
                                         id: wifiListProc
                                         command: ["bash", "-c", "nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list 2>/dev/null"]
-                                        onExited: {
-                                            if (stdout && stdout.length > 0) {
-                                                var lines = stdout.trim().split('\n');
+                                        stdout: SplitParser {
+                                            onRead: data => {
+                                                var lines = data.trim().split('\n');
                                                 var networks = [];
                                                 networkTab.currentWifi = "";
                                                 for (var i = 0; i < lines.length; i++) {
@@ -381,16 +381,16 @@ Scope {
                                                     }
                                                 }
                                                 networkTab.wifiList = networks;
+                                                networkTab.scanning = false;
                                             }
-                                            networkTab.scanning = false;
                                         }
                                     }
 
                                     Process {
                                         id: wifiStatusProc
                                         command: ["nmcli", "radio", "wifi"]
-                                        onExited: {
-                                            if (stdout) networkTab.wifiEnabled = stdout.trim() === "enabled";
+                                        stdout: SplitParser {
+                                            onRead: data => { networkTab.wifiEnabled = data.trim() === "enabled"; }
                                         }
                                     }
 
@@ -511,27 +511,27 @@ Scope {
                                     Process {
                                         id: btStatusProc
                                         command: ["bash", "-c", "bluetoothctl show 2>/dev/null | grep 'Powered:' | awk '{print $2}'"]
-                                        onExited: {
-                                            if (stdout) bluetoothTab.btEnabled = stdout.trim() === "yes";
+                                        stdout: SplitParser {
+                                            onRead: data => { bluetoothTab.btEnabled = data.trim() === "yes"; }
                                         }
                                     }
 
                                     Process {
                                         id: btDevicesProc
                                         command: ["bluetoothctl", "devices"]
-                                        onExited: {
-                                            if (stdout && stdout.length > 0) {
-                                                var lines = stdout.trim().split('\n');
+                                        stdout: SplitParser {
+                                            onRead: data => {
+                                                var lines = data.trim().split('\n');
                                                 var devices = [];
                                                 for (var i = 0; i < lines.length; i++) {
-                                                    var match = lines[i].match(/Device ([A-F0-9:]+) (.+)/);
+                                                    var match = lines[i].match(/Device ([A-Fa-f0-9:]+) (.+)/);
                                                     if (match) {
                                                         devices.push({ mac: match[1], name: match[2], connected: false });
                                                     }
                                                 }
                                                 bluetoothTab.deviceList = devices;
+                                                bluetoothTab.scanning = false;
                                             }
-                                            bluetoothTab.scanning = false;
                                         }
                                     }
 

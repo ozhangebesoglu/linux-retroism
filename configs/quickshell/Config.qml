@@ -16,9 +16,9 @@ Singleton {
         id: readTerminal
         command: ["grep", "^\\$terminal", hyprlandConfigPath]
         running: true
-        onExited: {
-            if (stdout && stdout.length > 0) {
-                var match = stdout.match(/\$terminal\s*=\s*(.+)/);
+        stdout: SplitParser {
+            onRead: data => {
+                var match = data.match(/\$terminal\s*=\s*(.+)/);
                 if (match) hyprlandTerminal = match[1].trim();
             }
         }
@@ -28,9 +28,9 @@ Singleton {
         id: readFileManager
         command: ["grep", "^\\$fileManager", hyprlandConfigPath]
         running: true
-        onExited: {
-            if (stdout && stdout.length > 0) {
-                var match = stdout.match(/\$fileManager\s*=\s*(.+)/);
+        stdout: SplitParser {
+            onRead: data => {
+                var match = data.match(/\$fileManager\s*=\s*(.+)/);
                 if (match) hyprlandFileManager = match[1].trim();
             }
         }
