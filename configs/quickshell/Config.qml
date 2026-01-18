@@ -17,8 +17,10 @@ Singleton {
         command: ["grep", "^\\$terminal", hyprlandConfigPath]
         running: true
         onExited: {
-            var match = stdout.match(/\$terminal\s*=\s*(.+)/);
-            if (match) hyprlandTerminal = match[1].trim();
+            if (stdout && stdout.length > 0) {
+                var match = stdout.match(/\$terminal\s*=\s*(.+)/);
+                if (match) hyprlandTerminal = match[1].trim();
+            }
         }
     }
 
@@ -27,8 +29,10 @@ Singleton {
         command: ["grep", "^\\$fileManager", hyprlandConfigPath]
         running: true
         onExited: {
-            var match = stdout.match(/\$fileManager\s*=\s*(.+)/);
-            if (match) hyprlandFileManager = match[1].trim();
+            if (stdout && stdout.length > 0) {
+                var match = stdout.match(/\$fileManager\s*=\s*(.+)/);
+                if (match) hyprlandFileManager = match[1].trim();
+            }
         }
     }
 

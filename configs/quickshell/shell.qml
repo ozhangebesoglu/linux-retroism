@@ -9,6 +9,7 @@
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 
@@ -363,35 +364,59 @@ Scope {
 
                                     Component.onCompleted: refreshNetworks()
 
+                                    Process {
+                                        id: wifiListProc
+                                        command: ["bash", "-c", "nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list 2>/dev/null"]
+                                        onExited: {
+                                            if (stdout && stdout.length > 0) {
+                                                var lines = stdout.trim().split('\n');
+                                                var networks = [];
+                                                networkTab.currentWifi = "";
+                                                for (var i = 0; i < lines.length; i++) {
+                                                    var parts = lines[i].split(':');
+                                                    if (parts[0] && parts[0].trim() !== "") {
+                                                        var net = { ssid: parts[0], signal: parseInt(parts[1]) || 0, security: parts[2] || "", active: parts[3] === "*" };
+                                                        networks.push(net);
+                                                        if (net.active) networkTab.currentWifi = net.ssid;
+                                                    }
+                                                }
+                                                networkTab.wifiList = networks;
+                                            }
+                                            networkTab.scanning = false;
+                                        }
+                                    }
+
+                                    Process {
+                                        id: wifiStatusProc
+                                        command: ["nmcli", "radio", "wifi"]
+                                        onExited: {
+                                            if (stdout) networkTab.wifiEnabled = stdout.trim() === "enabled";
+                                        }
+                                    }
+
+                                    Process {
+                                        id: wifiToggleProc
+                                        onExited: { Qt.callLater(networkTab.refreshNetworks); }
+                                    }
+
+                                    Process {
+                                        id: wifiConnectProc
+                                    }
+
                                     function refreshNetworks() {
                                         scanning = true;
-                                        Quickshell.exec("nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list", function(result) {
-                                            var lines = result.stdout.trim().split('\n');
-                                            var networks = [];
-                                            currentWifi = "";
-                                            for (var i = 0; i < lines.length; i++) {
-                                                var parts = lines[i].split(':');
-                                                if (parts[0] && parts[0].trim() !== "") {
-                                                    var net = { ssid: parts[0], signal: parseInt(parts[1]) || 0, security: parts[2] || "", active: parts[3] === "*" };
-                                                    networks.push(net);
-                                                    if (net.active) currentWifi = net.ssid;
-                                                }
-                                            }
-                                            wifiList = networks;
-                                            scanning = false;
-                                        });
-                                        Quickshell.exec("nmcli radio wifi", function(result) {
-                                            wifiEnabled = result.stdout.trim() === "enabled";
-                                        });
+                                        wifiListProc.running = true;
+                                        wifiStatusProc.running = true;
                                     }
 
                                     function toggleWifi() {
-                                        var cmd = wifiEnabled ? "nmcli radio wifi off" : "nmcli radio wifi on";
-                                        Quickshell.exec(cmd, function() { Qt.callLater(refreshNetworks); });
+                                        wifiToggleProc.command = ["nmcli", "radio", "wifi", wifiEnabled ? "off" : "on"];
+                                        wifiToggleProc.running = true;
                                     }
 
                                     function connectToNetwork(ssid) {
-                                        Quickshell.execDetached("nmcli device wifi connect '" + ssid + "'");
+                                        wifiConnectProc.command = ["nmcli", "device", "wifi", "connect", ssid];
+                                        wifiConnectProc.running = true;
                                     }
 
                                     Column {
@@ -479,60 +504,75 @@ Scope {
                                     property var deviceList: []
                                     property bool btEnabled: true
                                     property bool scanning: false
+                                    property var pendingDevices: []
 
                                     Component.onCompleted: refreshDevices()
 
-                                    function refreshDevices() {
-                                        scanning = true;
-                                        Quickshell.exec("bluetoothctl show 2>/dev/null | grep 'Powered:' | awk '{print $2}'", function(result) {
-                                            btEnabled = result.stdout.trim() === "yes";
-                                        });
-                                        Quickshell.exec("bluetoothctl devices", function(result) {
-                                            var lines = result.stdout.trim().split('\n');
-                                            var devices = [];
-                                            for (var i = 0; i < lines.length; i++) {
-                                                var match = lines[i].match(/Device ([A-F0-9:]+) (.+)/);
-                                                if (match) {
-                                                    devices.push({ mac: match[1], name: match[2], connected: false });
-                                                }
-                                            }
-                                            // Check connected devices
-                                            Quickshell.exec("bluetoothctl info 2>/dev/null | grep -E 'Device|Connected'", function(infoResult) {
-                                                var infoLines = infoResult.stdout.split('\n');
-                                                var connectedMacs = [];
-                                                for (var j = 0; j < infoLines.length; j++) {
-                                                    if (infoLines[j].includes("Connected: yes")) {
-                                                        // Previous line has MAC
-                                                        for (var k = j - 1; k >= 0; k--) {
-                                                            var macMatch = infoLines[k].match(/Device ([A-F0-9:]+)/);
-                                                            if (macMatch) { connectedMacs.push(macMatch[1]); break; }
-                                                        }
+                                    Process {
+                                        id: btStatusProc
+                                        command: ["bash", "-c", "bluetoothctl show 2>/dev/null | grep 'Powered:' | awk '{print $2}'"]
+                                        onExited: {
+                                            if (stdout) bluetoothTab.btEnabled = stdout.trim() === "yes";
+                                        }
+                                    }
+
+                                    Process {
+                                        id: btDevicesProc
+                                        command: ["bluetoothctl", "devices"]
+                                        onExited: {
+                                            if (stdout && stdout.length > 0) {
+                                                var lines = stdout.trim().split('\n');
+                                                var devices = [];
+                                                for (var i = 0; i < lines.length; i++) {
+                                                    var match = lines[i].match(/Device ([A-F0-9:]+) (.+)/);
+                                                    if (match) {
+                                                        devices.push({ mac: match[1], name: match[2], connected: false });
                                                     }
                                                 }
-                                                for (var d = 0; d < devices.length; d++) {
-                                                    devices[d].connected = connectedMacs.indexOf(devices[d].mac) !== -1;
-                                                }
-                                                deviceList = devices;
-                                                scanning = false;
-                                            });
-                                        });
+                                                bluetoothTab.deviceList = devices;
+                                            }
+                                            bluetoothTab.scanning = false;
+                                        }
+                                    }
+
+                                    Process {
+                                        id: btToggleProc
+                                        onExited: { Qt.callLater(bluetoothTab.refreshDevices); }
+                                    }
+
+                                    Process {
+                                        id: btConnectProc
+                                    }
+
+                                    Process {
+                                        id: btScanProc
+                                        command: ["bluetoothctl", "--timeout", "5", "scan", "on"]
+                                        onExited: { bluetoothTab.refreshDevices(); }
+                                    }
+
+                                    function refreshDevices() {
+                                        scanning = true;
+                                        btStatusProc.running = true;
+                                        btDevicesProc.running = true;
                                     }
 
                                     function toggleBluetooth() {
-                                        var cmd = btEnabled ? "bluetoothctl power off" : "bluetoothctl power on";
-                                        Quickshell.exec(cmd, function() { Qt.callLater(refreshDevices); });
+                                        btToggleProc.command = ["bluetoothctl", "power", btEnabled ? "off" : "on"];
+                                        btToggleProc.running = true;
                                     }
 
                                     function connectDevice(mac) {
-                                        Quickshell.execDetached("bluetoothctl connect " + mac);
+                                        btConnectProc.command = ["bluetoothctl", "connect", mac];
+                                        btConnectProc.running = true;
                                     }
 
                                     function disconnectDevice(mac) {
-                                        Quickshell.execDetached("bluetoothctl disconnect " + mac);
+                                        btConnectProc.command = ["bluetoothctl", "disconnect", mac];
+                                        btConnectProc.running = true;
                                     }
 
                                     function startScan() {
-                                        Quickshell.exec("bluetoothctl --timeout 5 scan on", function() { refreshDevices(); });
+                                        btScanProc.running = true;
                                     }
 
                                     Column {
@@ -670,18 +710,33 @@ Scope {
 
             property string powerMenuState: ""
             
+            Process {
+                id: powerCmdProc
+            }
+
+            Process {
+                id: hyprlockThemeProc
+            }
+
             function updateHyprlockTheme() {
                 var c = Config.colors;
-                var cmd = "sed -i " +
-                    "-e 's/outer_color = rgb([^)]*)/outer_color = rgb(" + c.outline.slice(1) + ")/g' " +
-                    "-e 's/inner_color = rgb([^)]*)/inner_color = rgb(" + c.base.slice(1) + ")/g' " +
-                    "-e 's/font_color = rgb([^)]*)/font_color = rgb(" + c.text.slice(1) + ")/g' " +
-                    "-e 's/check_color = rgb([^)]*)/check_color = rgb(" + c.accent.slice(1) + ")/g' " +
-                    "-e 's/fail_color = rgb([^)]*)/fail_color = rgb(" + c.urgent.slice(1) + ")/g' " +
-                    "-e 's/color = rgb(3e3d38)/color = rgb(" + c.text.slice(1) + ")/g' " +
-                    "-e 's/color = rgb(626335)/color = rgb(" + c.accent.slice(1) + ")/g' " +
-                    "/home/ozhan/.config/hypr/hyprlock.conf";
-                Quickshell.execDetached(cmd);
+                var sedArgs = [
+                    "-i",
+                    "-e", "s/outer_color = rgb([^)]*)/outer_color = rgb(" + c.outline.slice(1) + ")/g",
+                    "-e", "s/inner_color = rgb([^)]*)/inner_color = rgb(" + c.base.slice(1) + ")/g",
+                    "-e", "s/font_color = rgb([^)]*)/font_color = rgb(" + c.text.slice(1) + ")/g",
+                    "-e", "s/check_color = rgb([^)]*)/check_color = rgb(" + c.accent.slice(1) + ")/g",
+                    "-e", "s/fail_color = rgb([^)]*)/fail_color = rgb(" + c.urgent.slice(1) + ")/g",
+                    "/home/ozhan/.config/hypr/hyprlock.conf"
+                ];
+                hyprlockThemeProc.command = ["sed"].concat(sedArgs);
+                hyprlockThemeProc.running = true;
+            }
+
+            function runPowerCommand(cmd) {
+                var parts = cmd.split(" ");
+                powerCmdProc.command = parts;
+                powerCmdProc.running = true;
             }
             
             property var powerActions: {
@@ -752,7 +807,7 @@ Scope {
                                                 if (actionKey === "lock") {
                                                     powerMenu.updateHyprlockTheme();
                                                 }
-                                                Quickshell.execDetached(powerMenu.powerActions[actionKey].cmd);
+                                                powerMenu.runPowerCommand(powerMenu.powerActions[actionKey].cmd);
                                                 Config.openPowerMenu = false;
                                             }
                                         }
@@ -795,7 +850,7 @@ Scope {
                                     MouseArea {
                                         id: yesArea; anchors.fill: parent; cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            if (powerMenu.powerMenuState !== "") Quickshell.execDetached(powerMenu.powerActions[powerMenu.powerMenuState].cmd);
+                                            if (powerMenu.powerMenuState !== "") powerMenu.runPowerCommand(powerMenu.powerActions[powerMenu.powerMenuState].cmd);
                                             powerMenu.powerMenuState = ""; Config.openPowerMenu = false;
                                         }
                                     }
