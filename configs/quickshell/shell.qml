@@ -267,8 +267,8 @@ Scope {
                                     anchors.margins: 20
                                     visible: settingsWindow.currentTab === 1
 
-                                    property int brightness: 100
-                                    property int maxBrightness: 100
+                                    property int brightness: 0
+                                    property int maxBrightness: 1
                                     property real volume: 1.0
                                     property bool muted: false
                                     property string brightnessOutput: ""
@@ -276,7 +276,6 @@ Scope {
                                     property string volumeOutput: ""
 
                                     Component.onCompleted: {
-                                        brightnessProc.running = true;
                                         maxBrightnessProc.running = true;
                                         volumeProc.running = true;
                                     }
@@ -292,7 +291,10 @@ Scope {
                                         id: maxBrightnessProc
                                         command: ["brightnessctl", "m"]
                                         stdout: SplitParser { onRead: data => { systemTab.maxBrightnessOutput = data.trim(); } }
-                                        onExited: { systemTab.maxBrightness = parseInt(systemTab.maxBrightnessOutput) || 100; }
+                                        onExited: { 
+                                            systemTab.maxBrightness = parseInt(systemTab.maxBrightnessOutput) || 1; 
+                                            brightnessProc.running = true;
+                                        }
                                     }
 
                                     Process {
